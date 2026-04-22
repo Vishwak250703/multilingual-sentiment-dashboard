@@ -1,0 +1,214 @@
+services:
+  # ─── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: sentiment_postgres_prod
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Not exposed to host — only accessible within the internal network
+    networks:
+      - sentiment_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sentiment_redis_prod
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    # Not exposed to host
+    networks:
+      - sentiment_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── ChromaDB ────────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: sentiment_chromadb_prod
+    restart: always
+    volumes:
+      - chroma_data:/chroma/chroma
+    # Not exposed to host
+    networks:
+      - sentiment_net
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+
+  # ─── Backend (FastAPI) ───────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentiment_backend_prod
+    restart: always
+    env_file: .env
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CHROMA_HOST=chromadb
+    volumes:
+      # No code mount — code is baked into the image
+      - uploads_data:/app/uploads
+    # Not exposed to host — nginx proxies port 80 → backend:8000
+    networks:
+      - sentiment_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    command: >
+      sh -c "
+        python -m app.scripts.wait_for_db &&
+        alembic upgrade head &&
+        python -m app.scripts.seed_admin &&
+        uvicorn app.main:app
+          --host 0.0.0.0
+          --port 8000
+          --workers 2
+          --proxy-headers
+          --forwarded-allow-ips='*'
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ─── Celery Worker ───────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentiment_worker_prod
+    restart: always
+    env_file: .env
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CHROMA_HOST=chromadb
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - sentiment_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.tasks.celery_app worker
+        --loglevel=warning
+        --concurrency=4
+        -Q default,nlp,alerts
+
+  # ─── Celery Beat (Scheduler) ──────────────────────────────────
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentiment_beat_prod
+    restart: always
+    env_file: .env
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CHROMA_HOST=chromadb
+    networks:
+      - sentiment_net
+    depends_on:
+      - worker
+    command: >
+      celery -A app.tasks.celery_app beat
+        --loglevel=warning
+        --scheduler celery.beat:PersistentScheduler
+
+  # ─── Frontend (React — pre-built static files served via nginx) ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sentiment_frontend_prod
+    restart: always
+    # Not exposed to host — outer nginx proxies to this container
+    networks:
+      - sentiment_net
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─── Nginx (Reverse Proxy + Static Assets) ───────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: sentiment_nginx_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Use nginx.ssl.conf for HTTPS; swap back to nginx.conf for plain HTTP
+      - ./nginx/nginx.ssl.conf:/etc/nginx/nginx.conf:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    networks:
+      - sentiment_net
+    depends_on:
+      - backend
+      - frontend
+    command: >
+      sh -c "nginx -g 'daemon off;' & while :; do sleep 6h; nginx -s reload; done"
+
+  # ─── Certbot (Let's Encrypt) ──────────────────────────────────
+  # Run once to obtain certs: make ssl-init DOMAIN=yourdomain.com EMAIL=you@example.com
+  # Afterwards certbot auto-renews every 12h.
+  certbot:
+    image: certbot/certbot:latest
+    container_name: sentiment_certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    # Default entrypoint just renews; the init script handles first-run.
+    entrypoint: >
+      sh -c "trap exit TERM; while :; do
+        certbot renew --webroot -w /var/www/certbot --quiet;
+        sleep 12h &
+        wait $${!};
+      done"
+
+networks:
+  sentiment_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+  uploads_data:
+  certbot_www:
+  certbot_conf:

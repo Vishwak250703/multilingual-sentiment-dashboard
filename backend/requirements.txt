@@ -1,0 +1,56 @@
+# ─── Web Framework ────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+httpx==0.27.0
+
+# ─── Database ─────────────────────────────────────────────────
+sqlalchemy==2.0.30
+asyncpg==0.29.0
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# ─── Redis / Celery ───────────────────────────────────────────
+redis[asyncio]==5.0.4
+celery[redis]==5.3.6
+
+# ─── Auth / Security ──────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.3
+
+# ─── Config / Env ─────────────────────────────────────────────
+pydantic==2.7.1
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
+
+# ─── AI / NLP ─────────────────────────────────────────────────
+anthropic==0.28.0
+sentence-transformers==2.7.0
+langdetect==1.0.9
+langid==1.1.6
+
+# ─── Translation ──────────────────────────────────────────────
+deep-translator==1.11.4
+
+# ─── Vector Store ─────────────────────────────────────────────
+chromadb==0.5.0
+
+# ─── Data Processing ──────────────────────────────────────────
+pandas==2.2.2
+openpyxl==3.1.2
+numpy==1.26.4
+
+# ─── PII Masking ──────────────────────────────────────────────
+# presidio + spacy deferred to Phase 7 (typer/weasel conflict on Debian trixie)
+# pii_masker.py uses regex fallback automatically when presidio is absent
+
+# ─── Export ───────────────────────────────────────────────────
+reportlab==4.2.0
+# weasyprint deferred to Phase 7 (requires libpango/libcairo system libs)
+
+# ─── Utilities ────────────────────────────────────────────────
+aiofiles==23.2.1
+python-slugify==8.0.4
+email-validator==2.1.1
+Pillow==10.3.0
