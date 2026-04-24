@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libpq-dev \
+    libffi-dev \
+    libssl-dev \
+    libxml2-dev \
+    libxslt-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN mkdir -p /app/uploads /tmp/chroma_data
+
+CMD ["celery", "-A", "app.tasks.celery_app", "worker", \
+     "--loglevel=warning", "--concurrency=2", "-Q", "default,nlp,alerts"]

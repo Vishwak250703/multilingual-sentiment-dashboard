@@ -1,9 +1,3 @@
-databases:
-  - name: sentiment-db
-    databaseName: sentimentdb
-    user: sentimentuser
-    plan: free
-
 services:
   # ─── FastAPI Backend ──────────────────────────────────────────
   - type: web
@@ -21,44 +15,31 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: ANTHROPIC_API_KEY
-        sync: false           # set manually in Render dashboard
+        sync: false
       - key: DATABASE_URL
-        fromDatabase:
-          name: sentiment-db
-          property: connectionString
+        sync: false
       - key: DATABASE_URL_SYNC
-        fromDatabase:
-          name: sentiment-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
-        sync: false           # paste Upstash Redis URL here
+        sync: false
       - key: CELERY_BROKER_URL
-        sync: false           # paste Upstash Redis URL here
+        sync: false
       - key: CELERY_RESULT_BACKEND
-        sync: false           # paste Upstash Redis URL here
+        sync: false
       - key: CHROMA_MODE
         value: embedded
       - key: CHROMA_PATH
-        value: /app/chroma_data
+        value: /tmp/chroma_data
       - key: ALLOWED_ORIGINS
-        sync: false           # set to your Vercel frontend URL
-    disk:
-      name: chroma-data
-      mountPath: /app/chroma_data
-      sizeGB: 1
+        sync: false
 
   # ─── Celery Worker ────────────────────────────────────────────
   - type: worker
     name: sentiment-worker
     runtime: docker
-    dockerfilePath: ./backend/Dockerfile
+    dockerfilePath: ./backend/Dockerfile.worker
     dockerContext: ./backend
     plan: free
-    startCommand: >
-      celery -A app.tasks.celery_app worker
-        --loglevel=warning
-        --concurrency=2
-        -Q default,nlp,alerts
     envVars:
       - key: ENVIRONMENT
         value: production
@@ -72,13 +53,9 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: DATABASE_URL
-        fromDatabase:
-          name: sentiment-db
-          property: connectionString
+        sync: false
       - key: DATABASE_URL_SYNC
-        fromDatabase:
-          name: sentiment-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
         sync: false
       - key: CELERY_BROKER_URL
@@ -88,8 +65,4 @@ services:
       - key: CHROMA_MODE
         value: embedded
       - key: CHROMA_PATH
-        value: /app/chroma_data
-    disk:
-      name: chroma-data-worker
-      mountPath: /app/chroma_data
-      sizeGB: 1
+        value: /tmp/chroma_data
