@@ -9,17 +9,8 @@ logger = logging.getLogger(__name__)
 
 def _get_chroma_collection(tenant_id: str):
     """Get or create a ChromaDB collection for a tenant."""
-    import chromadb
-    from app.core.config import settings
-
-    client = chromadb.HttpClient(host=settings.CHROMA_HOST, port=settings.CHROMA_PORT)
-    # One collection per tenant — enforces data isolation
-    collection_name = f"reviews_{tenant_id.replace('-', '_')}"
-    collection = client.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"},
-    )
-    return collection
+    from app.core.chroma import get_chroma_collection
+    return get_chroma_collection(tenant_id)
 
 
 @celery_app.task(

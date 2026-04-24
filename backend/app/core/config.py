@@ -27,8 +27,12 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
 
     # ChromaDB
+    # CHROMA_MODE=http   → separate ChromaDB container (docker-compose dev/prod)
+    # CHROMA_MODE=embedded → PersistentClient inside the process (free cloud deploy)
+    CHROMA_MODE: str = "http"
     CHROMA_HOST: str = "chromadb"
     CHROMA_PORT: int = 8000
+    CHROMA_PATH: str = "/app/chroma_data"
 
     # AI / NLP
     ANTHROPIC_API_KEY: str

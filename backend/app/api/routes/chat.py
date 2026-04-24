@@ -37,14 +37,14 @@ def _get_claude() -> Anthropic:
 def _embed_and_search(question: str, tenant_id: str, n_results: int = 8) -> list[str]:
     """Embed the question and query ChromaDB for similar review IDs."""
     try:
-        import chromadb
         from app.services.nlp.embedder import embed_text
+        from app.core.chroma import get_chroma_client
 
         vector = embed_text(question)
         if not vector:
             return []
 
-        client = chromadb.HttpClient(host=settings.CHROMA_HOST, port=settings.CHROMA_PORT)
+        client = get_chroma_client()
         collection_name = f"reviews_{tenant_id.replace('-', '_')}"
 
         try:
